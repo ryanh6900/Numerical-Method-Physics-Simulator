@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 #if ENABLE_INPUT_SYSTEM && STARTER_ASSETS_PACKAGES_CHECKED
 using UnityEngine.InputSystem;
 #endif
@@ -24,12 +25,11 @@ namespace StarterAssets
 		public float RotationSmoothTime = 0.12f;
 		[Tooltip("Acceleration and deceleration")]
 		public float SpeedChangeRate = 10.0f;
-
 		[Space(10)]
 		[Tooltip("The height the player can jump")]
 		public float JumpHeight = 1.2f;
 		[Tooltip("The character uses its own gravity value. The engine default is -9.81f")]
-		public float Gravity = -15.0f;
+		public float gravity = -15.0f;
 
 		[Space(10)]
 		[Tooltip("Time required to pass before being able to jump again. Set to 0f to instantly jump again")]
@@ -64,13 +64,22 @@ namespace StarterAssets
 		private float _cinemachineTargetPitch;
 
 		// player
+		[SerializeField] private GameObject characterProjectile;
 		private float _speed;
 		private float _animationBlend;
 		private float _targetRotation = 0.0f;
 		private float _rotationVelocity;
 		private float _verticalVelocity;
 		private float _terminalVelocity = 53.0f;
-
+		[SerializeField] private float currentHorizontalSpeed;
+		[SerializeField] private float projectileAngle;
+		[SerializeField] private LineRenderer aim;
+		[SerializeField] private float step;
+		[SerializeField] Transform firePoint;
+		[SerializeField] private float time;
+		[SerializeField] private float height;
+		[SerializeField] private Vector3 groundDirection;
+		[SerializeField] private ProjectileCalculations projectileCalculations;
 		// timeout deltatime
 		private float _jumpTimeoutDelta;
 		private float _fallTimeoutDelta;
@@ -86,7 +95,7 @@ namespace StarterAssets
 		private CharacterController _controller;
 		private StarterAssetsInputs _input;
 		private GameObject _mainCamera;
-
+		[SerializeField] private Camera playerCam;
 		private const float _threshold = 0.01f;
 
 		private bool _hasAnimator;
@@ -97,7 +106,9 @@ namespace StarterAssets
 			if (_mainCamera == null)
 			{
 				_mainCamera = GameObject.FindGameObjectWithTag("MainCamera");
+				//playerCam = _mainCamera.GetComponent<Camera>();
 			}
+			//playerCam = Camera.main;
 		}
 
 		private void Start()
@@ -105,7 +116,7 @@ namespace StarterAssets
 			_hasAnimator = TryGetComponent(out _animator);
 			_controller = GetComponent<CharacterController>();
 			_input = GetComponent<StarterAssetsInputs>();
-
+			projectileCalculations = GetComponent<ProjectileCalculations>();
 			AssignAnimationIDs();
 
 			// reset our timeouts on start
@@ -117,7 +128,28 @@ namespace StarterAssets
 		{
 			_hasAnimator = TryGetComponent(out _animator);
 			
-			JumpAndGravity();
+			
+		
+                Ray ray = _mainCamera.GetComponent<Camera>().ScreenPointToRay(_input.look);
+                RaycastHit hit;
+
+				if (Physics.Raycast(ray, out hit))
+                {
+					Vector3 direction = hit.point - firePoint.position;
+					float angle = projectileAngle * Mathf.Deg2Rad;
+					groundDirection = new Vector3(direction.x, 0, direction.z);
+					Vector3 targetPosition = new Vector3(groundDirection.magnitude, direction.y, 0);
+					height = targetPosition.y + targetPosition.magnitude / 2f;
+                    Mathf.Max(0.01f, height);
+                    float v0;
+                    if (_input.aim)
+                    {
+						//CalculatePath(targetPosition, angle, out v0, out time);
+						projectileCalculations.CalculatePathWithHeight(targetPosition, height, out angle, out v0, out time);
+						projectileCalculations.DrawPath(aim, firePoint,groundDirection.normalized, v0, angle, time, step);
+					} 
+                }
+            HandleProjectileJump();
 			GroundedCheck();
 			Move();
 		}
@@ -156,16 +188,99 @@ namespace StarterAssets
 			{
 				_cinemachineTargetYaw += _input.look.x * Time.deltaTime;
 				_cinemachineTargetPitch += _input.look.y * Time.deltaTime;
+				projectileAngle += _cinemachineTargetPitch;
 			}
 
 			// clamp our rotations so our values are limited 360 degrees
 			_cinemachineTargetYaw = ClampAngle(_cinemachineTargetYaw, float.MinValue, float.MaxValue);
 			_cinemachineTargetPitch = ClampAngle(_cinemachineTargetPitch, BottomClamp, TopClamp);
-
+			projectileAngle = ClampAngle(_cinemachineTargetPitch,-180,180);
 			// Cinemachine will follow this target
 			CinemachineCameraTarget.transform.rotation = Quaternion.Euler(_cinemachineTargetPitch + CameraAngleOverride, _cinemachineTargetYaw, 0.0f);
 		}
+		private void Dash()
+		{
 
+		}
+		
+		private void HandleProjectileJump()
+		{
+			if (Grounded)
+			{
+				// reset the fall timeout timer
+				_fallTimeoutDelta = FallTimeout;
+
+				// update animator if using character
+				if (_hasAnimator)
+				{
+					_animator.SetBool(_animIDJump, false);
+					_animator.SetBool(_animIDFreeFall, false);
+				}
+
+				// stop our velocity dropping infinitely when grounded
+				if (_verticalVelocity < 0.0f)
+				{
+					_verticalVelocity = -2f;
+				}
+
+				// Jump
+				if (_input.jump && _jumpTimeoutDelta <= 0.0f)
+				{
+					// the square root of H * -2 * G = how much velocity needed to reach desired height
+					_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * gravity);
+                    float angle = projectileAngle * Mathf.Deg2Rad;
+					Debug.Log("Projectile = " + characterProjectile.name);
+					Debug.Log("firepoint = "+ firePoint);
+					Debug.Log("groundDirection.normalize = " + groundDirection.normalized);
+					Debug.Log("Time = "+time);
+					Debug.Log("CurrentSpeed = "+ currentHorizontalSpeed);
+					StopAllCoroutines();
+                    StartCoroutine(projectileCalculations.ProjectileMovement(characterProjectile, firePoint,groundDirection.normalized, currentHorizontalSpeed*2, angle, time));
+                    //// update animator if using character
+                    if (_hasAnimator)
+					{
+						_animator.SetBool(_animIDJump, true);
+					}
+				}
+
+				// jump timeout
+				if (_jumpTimeoutDelta >= 0.0f)
+				{
+					_jumpTimeoutDelta -= Time.deltaTime;
+				}
+			}
+			else
+			{
+				// reset the jump timeout timer
+				_jumpTimeoutDelta = JumpTimeout;
+
+				// fall timeout
+				if (_fallTimeoutDelta >= 0.0f)
+				{
+					_fallTimeoutDelta -= Time.deltaTime;
+				}
+				else
+				{
+					// update animator if using character
+					if (_hasAnimator)
+					{
+						_animator.SetBool(_animIDFreeFall, true);
+					}
+				}
+
+				// if we are not grounded, do not jump
+				_input.jump = false;
+			}
+
+			// apply gravity over time if under terminal (multiply by delta time twice to linearly speed up over time)
+			if (_verticalVelocity < _terminalVelocity)
+			{
+				_verticalVelocity += gravity * Time.deltaTime;
+			}
+		}
+		
+		
+		
 		private void Move()
 		{
 			// set target speed based on move speed, sprint speed and if sprint is pressed
@@ -178,7 +293,7 @@ namespace StarterAssets
 			if (_input.move == Vector2.zero) targetSpeed = 0.0f;
 
 			// a reference to the players current horizontal velocity
-			float currentHorizontalSpeed = new Vector3(_controller.velocity.x, 0.0f, _controller.velocity.z).magnitude;
+			currentHorizontalSpeed = new Vector3(_controller.velocity.x, 0.0f, _controller.velocity.z).magnitude;
 
 			float speedOffset = 0.1f;
 			float inputMagnitude = _input.analogMovement ? _input.move.magnitude : 1f;
@@ -208,6 +323,7 @@ namespace StarterAssets
 			{
 				_targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + _mainCamera.transform.eulerAngles.y;
 				float rotation = Mathf.SmoothDampAngle(transform.eulerAngles.y, _targetRotation, ref _rotationVelocity, RotationSmoothTime);
+				//enable crosshair here and handle projectile angles.
 
 				// rotate to face input direction relative to camera position
 				transform.rotation = Quaternion.Euler(0.0f, rotation, 0.0f);
@@ -250,8 +366,9 @@ namespace StarterAssets
 				// Jump
 				if (_input.jump && _jumpTimeoutDelta <= 0.0f)
 				{
+					//check if normal physics or Euler is Checked.
 					// the square root of H * -2 * G = how much velocity needed to reach desired height
-					_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * Gravity);
+					_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * gravity);
 
 					// update animator if using character
 					if (_hasAnimator)
@@ -292,7 +409,7 @@ namespace StarterAssets
 			// apply gravity over time if under terminal (multiply by delta time twice to linearly speed up over time)
 			if (_verticalVelocity < _terminalVelocity)
 			{
-				_verticalVelocity += Gravity * Time.deltaTime;
+				_verticalVelocity += gravity * Time.deltaTime;
 			}
 		}
 

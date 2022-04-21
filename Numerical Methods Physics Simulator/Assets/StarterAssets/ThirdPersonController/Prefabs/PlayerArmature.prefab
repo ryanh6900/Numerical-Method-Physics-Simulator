@@ -1005,6 +1005,7 @@ GameObject:
   - component: {fileID: 5885216827943657505}
   - component: {fileID: 135756642000475821}
   - component: {fileID: 4416926081852918493}
+  - component: {fileID: 8727553334164641105}
   m_Layer: 8
   m_Name: PlayerArmature
   m_TagString: Player
@@ -1084,7 +1085,7 @@ MonoBehaviour:
   RotationSmoothTime: 0.12
   SpeedChangeRate: 10
   JumpHeight: 1.2
-  Gravity: -15
+  gravity: -15
   JumpTimeout: 0.3
   FallTimeout: 0.15
   Grounded: 1
@@ -1098,6 +1099,17 @@ MonoBehaviour:
   BottomClamp: -30
   CameraAngleOverride: 0
   LockCameraPosition: 0
+  characterProjectile: {fileID: 0}
+  currentHorizontalSpeed: 0
+  projectileAngle: 0
+  aim: {fileID: 0}
+  step: 0
+  firePoint: {fileID: 0}
+  time: 0
+  height: 0
+  groundDirection: {x: 0, y: 0, z: 0}
+  projectileCalculations: {fileID: 0}
+  playerCam: {fileID: 0}
 --- !u!114 &5885216827943657505
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1131,6 +1143,7 @@ MonoBehaviour:
   look: {x: 0, y: 0}
   jump: 0
   sprint: 0
+  aim: 0
   analogMovement: 0
   cursorLocked: 1
   cursorInputForLook: 1
@@ -1232,6 +1245,19 @@ MonoBehaviour:
   m_DefaultActionMap: Player
   m_SplitScreenIndex: -1
   m_Camera: {fileID: 0}
+--- !u!114 &8727553334164641105
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4416926081852918481}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e46f2e1f2d9cef41bcb4529e3918f7c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  gravity: -15
 --- !u!1 &4523139366846529165
 GameObject:
   m_ObjectHideFlags: 0
