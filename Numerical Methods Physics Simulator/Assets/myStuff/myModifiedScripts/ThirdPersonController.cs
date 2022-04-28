@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections;
 #if ENABLE_INPUT_SYSTEM && STARTER_ASSETS_PACKAGES_CHECKED
 using UnityEngine.InputSystem;
@@ -27,7 +27,7 @@ namespace StarterAssets
 		public float SpeedChangeRate = 10.0f;
 		[Space(10)]
 		[Tooltip("The height the player can jump")]
-		public float JumpHeight = 1.2f;
+		public float JumpHeight = 10;
 		[Tooltip("The character uses its own gravity value. The engine default is -9.81f")]
 		public float gravity = -15.0f;
 
@@ -79,7 +79,8 @@ namespace StarterAssets
 		[SerializeField] private float time;
 		[SerializeField] private float height;
 		[SerializeField] private Vector3 groundDirection;
-		[SerializeField] private ProjectileCalculations projectileCalculations;
+		[SerializeField] private Vector2 jumpVelocity;
+		[SerializeField] private ProjectileMotionCalculations projectileMotionCalculations;
 		// timeout deltatime
 		private float _jumpTimeoutDelta;
 		private float _fallTimeoutDelta;
@@ -90,7 +91,6 @@ namespace StarterAssets
 		private int _animIDJump;
 		private int _animIDFreeFall;
 		private int _animIDMotionSpeed;
-
 		private Animator _animator;
 		private CharacterController _controller;
 		private StarterAssetsInputs _input;
@@ -116,9 +116,8 @@ namespace StarterAssets
 			_hasAnimator = TryGetComponent(out _animator);
 			_controller = GetComponent<CharacterController>();
 			_input = GetComponent<StarterAssetsInputs>();
-			projectileCalculations = GetComponent<ProjectileCalculations>();
+			projectileMotionCalculations = GetComponent<ProjectileMotionCalculations>();
 			AssignAnimationIDs();
-
 			// reset our timeouts on start
 			_jumpTimeoutDelta = JumpTimeout;
 			_fallTimeoutDelta = FallTimeout;
@@ -127,29 +126,8 @@ namespace StarterAssets
 		private void Update()
 		{
 			_hasAnimator = TryGetComponent(out _animator);
-			
-			
-		
-                Ray ray = _mainCamera.GetComponent<Camera>().ScreenPointToRay(_input.look);
-                RaycastHit hit;
-
-				if (Physics.Raycast(ray, out hit))
-                {
-					Vector3 direction = hit.point - firePoint.position;
-					float angle = projectileAngle * Mathf.Deg2Rad;
-					groundDirection = new Vector3(direction.x, 0, direction.z);
-					Vector3 targetPosition = new Vector3(groundDirection.magnitude, direction.y, 0);
-					height = targetPosition.y + targetPosition.magnitude / 2f;
-                    Mathf.Max(0.01f, height);
-                    float v0;
-                    if (_input.aim)
-                    {
-						//CalculatePath(targetPosition, angle, out v0, out time);
-						projectileCalculations.CalculatePathWithHeight(targetPosition, height, out angle, out v0, out time);
-						projectileCalculations.DrawPath(aim, firePoint,groundDirection.normalized, v0, angle, time, step);
-					} 
-                }
-            HandleProjectileJump();
+            //HandleProjectileJump();
+			JumpAndGravity();
 			GroundedCheck();
 			Move();
 		}
@@ -157,7 +135,31 @@ namespace StarterAssets
 		private void LateUpdate()
 		{
 			CameraRotation();
-		}
+			Vector3 forward = transform.TransformDirection(Vector3.forward) * 5;
+			Debug.DrawRay(transform.position + new Vector3(0,1.65f,0.1f), forward, Color.green);
+            
+            RaycastHit hit;
+		    
+            if (Physics.Raycast(transform.position,forward, out hit,20f) && Grounded)
+            {
+                Vector3 direction = hit.point - firePoint.position;
+
+                float angle = projectileAngle * Mathf.Deg2Rad;
+                groundDirection = new Vector3(0, 0, direction.z);
+                Vector3 targetPosition = new Vector3(groundDirection.magnitude, direction.y, 0);
+                height = targetPosition.y + targetPosition.magnitude / 2f;
+                Mathf.Max(0.01f, height);
+				Debug.Log(height);
+                //float v0;
+				
+
+                //CalculatePath(targetPosition, angle, out v0, out time);
+				//JumpTimeout= projectileMotionCalculations.FindLandingTime(targetPosition,angle,jumpVelocity,transform.position.y);
+				//FallTimeout = projectileMotionCalculations.FindTimeToApex(targetPosition,angle,jumpVelocity,transform.position.y);
+                projectileMotionCalculations.CalculatePathWithHeight(targetPosition, height, ref jumpVelocity, out angle, out time);
+                //projectileMotionCalculations.DrawPath(aim, firePoint, groundDirection.normalized, jumpVelocity, angle, time, step);
+            }
+        }
 
 		private void AssignAnimationIDs()
 		{
@@ -180,7 +182,68 @@ namespace StarterAssets
 				_animator.SetBool(_animIDGrounded, Grounded);
 			}
 		}
+		private void Move()
+		{
+			// set target speed based on move speed, sprint speed and if sprint is pressed
+			float targetSpeed = _input.sprint ? SprintSpeed : MoveSpeed;
 
+			// a simplistic acceleration and deceleration designed to be easy to remove, replace, or iterate upon
+
+			// note: Vector2's == operator uses approximation so is not floating point error prone, and is cheaper than magnitude
+			// if there is no input, set the target speed to 0
+			if (_input.move == Vector2.zero) targetSpeed = 0.0f;
+
+			// a reference to the players current horizontal velocity
+			currentHorizontalSpeed = new Vector3(_controller.velocity.x, 0.0f, _controller.velocity.z).magnitude;
+			//jumpVelocity = new Vector2(_controller.velocity.z,JumpHeight);
+			float speedOffset = 0.1f;
+			float inputMagnitude = _input.analogMovement ? _input.move.magnitude : 1f;
+
+			// accelerate or decelerate to target speed
+			if (currentHorizontalSpeed < targetSpeed - speedOffset || currentHorizontalSpeed > targetSpeed + speedOffset)
+			{
+				// creates curved result rather than a linear one giving a more organic speed change
+				// note T in Lerp is clamped, so we don't need to clamp our speed
+				_speed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed * inputMagnitude, Time.deltaTime * SpeedChangeRate);
+
+				// round speed to 3 decimal places
+				_speed = Mathf.Round(_speed * 1000f) / 1000f;
+			}
+			else
+			{
+				_speed = targetSpeed;
+			}
+			_animationBlend = Mathf.Lerp(_animationBlend, targetSpeed, Time.deltaTime * SpeedChangeRate);
+
+			// normalise input direction
+			Vector3 inputDirection = new Vector3(_input.move.x, 0.0f, _input.move.y).normalized;
+
+			// note: Vector2's != operator uses approximation so is not floating point error prone, and is cheaper than magnitude
+			// if there is a move input rotate player when the player is moving
+			if (_input.move != Vector2.zero)
+			{
+				_targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + _mainCamera.transform.eulerAngles.y;
+				float rotation = Mathf.SmoothDampAngle(transform.eulerAngles.y, _targetRotation, ref _rotationVelocity, RotationSmoothTime);
+				//enable crosshair here and handle projectile angles.
+
+				// rotate to face input direction relative to camera position
+				transform.rotation = Quaternion.Euler(0.0f, rotation, 0.0f);
+			}
+
+
+			Vector3 targetDirection = Quaternion.Euler(0.0f, _targetRotation, 0.0f) * Vector3.forward;
+
+			// move the player
+			_controller.Move(targetDirection.normalized * (_speed * Time.deltaTime) + new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
+			
+			// update animator if using character
+			if (_hasAnimator)
+			{
+				_animator.SetFloat(_animIDSpeed, _animationBlend);
+				_animator.SetFloat(_animIDMotionSpeed, inputMagnitude);
+			}
+			
+		}
 		private void CameraRotation()
 		{
 			// if there is an input and camera position is not fixed
@@ -227,23 +290,26 @@ namespace StarterAssets
 				if (_input.jump && _jumpTimeoutDelta <= 0.0f)
 				{
 					// the square root of H * -2 * G = how much velocity needed to reach desired height
-					_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * gravity);
+
+					 //_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * gravity);
                     float angle = projectileAngle * Mathf.Deg2Rad;
-					Debug.Log("Projectile = " + characterProjectile.name);
-					Debug.Log("firepoint = "+ firePoint);
-					Debug.Log("groundDirection.normalize = " + groundDirection.normalized);
-					Debug.Log("Time = "+time);
-					Debug.Log("CurrentSpeed = "+ currentHorizontalSpeed);
+					// Debug.Log("Projectile = " + characterProjectile.name);
+					// Debug.Log("firepoint = "+ firePoint);
+					// Debug.Log("groundDirection.normalize = " + groundDirection.normalized);
+					// Debug.Log("Time = "+time);
+					// Debug.Log("CurrentSpeed = "+ currentHorizontalSpeed);
 					StopAllCoroutines();
-                    StartCoroutine(projectileCalculations.ProjectileMovement(characterProjectile, firePoint,groundDirection.normalized, currentHorizontalSpeed*2, angle, time));
-                    //// update animator if using character
+                    StartCoroutine(projectileMotionCalculations.ProjectileMotionMovement(characterProjectile, firePoint,groundDirection.normalized, jumpVelocity*2, angle, time));
+					
+					//// update animator if using character
                     if (_hasAnimator)
 					{
 						_animator.SetBool(_animIDJump, true);
 					}
 				}
+			 
 
-				// jump timeout
+				//jump timeout
 				if (_jumpTimeoutDelta >= 0.0f)
 				{
 					_jumpTimeoutDelta -= Time.deltaTime;
@@ -251,17 +317,17 @@ namespace StarterAssets
 			}
 			else
 			{
-				// reset the jump timeout timer
+				//reset the jump timeout timer
 				_jumpTimeoutDelta = JumpTimeout;
 
-				// fall timeout
+				//fall timeout
 				if (_fallTimeoutDelta >= 0.0f)
 				{
 					_fallTimeoutDelta -= Time.deltaTime;
 				}
 				else
 				{
-					// update animator if using character
+					//update animator if using character
 					if (_hasAnimator)
 					{
 						_animator.SetBool(_animIDFreeFall, true);
@@ -269,7 +335,7 @@ namespace StarterAssets
 				}
 
 				// if we are not grounded, do not jump
-				_input.jump = false;
+				 _input.jump = false;
 			}
 
 			// apply gravity over time if under terminal (multiply by delta time twice to linearly speed up over time)
@@ -281,74 +347,14 @@ namespace StarterAssets
 		
 		
 		
-		private void Move()
-		{
-			// set target speed based on move speed, sprint speed and if sprint is pressed
-			float targetSpeed = _input.sprint ? SprintSpeed : MoveSpeed;
-
-			// a simplistic acceleration and deceleration designed to be easy to remove, replace, or iterate upon
-
-			// note: Vector2's == operator uses approximation so is not floating point error prone, and is cheaper than magnitude
-			// if there is no input, set the target speed to 0
-			if (_input.move == Vector2.zero) targetSpeed = 0.0f;
-
-			// a reference to the players current horizontal velocity
-			currentHorizontalSpeed = new Vector3(_controller.velocity.x, 0.0f, _controller.velocity.z).magnitude;
-
-			float speedOffset = 0.1f;
-			float inputMagnitude = _input.analogMovement ? _input.move.magnitude : 1f;
-
-			// accelerate or decelerate to target speed
-			if (currentHorizontalSpeed < targetSpeed - speedOffset || currentHorizontalSpeed > targetSpeed + speedOffset)
-			{
-				// creates curved result rather than a linear one giving a more organic speed change
-				// note T in Lerp is clamped, so we don't need to clamp our speed
-				_speed = Mathf.Lerp(currentHorizontalSpeed, targetSpeed * inputMagnitude, Time.deltaTime * SpeedChangeRate);
-
-				// round speed to 3 decimal places
-				_speed = Mathf.Round(_speed * 1000f) / 1000f;
-			}
-			else
-			{
-				_speed = targetSpeed;
-			}
-			_animationBlend = Mathf.Lerp(_animationBlend, targetSpeed, Time.deltaTime * SpeedChangeRate);
-
-			// normalise input direction
-			Vector3 inputDirection = new Vector3(_input.move.x, 0.0f, _input.move.y).normalized;
-
-			// note: Vector2's != operator uses approximation so is not floating point error prone, and is cheaper than magnitude
-			// if there is a move input rotate player when the player is moving
-			if (_input.move != Vector2.zero)
-			{
-				_targetRotation = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + _mainCamera.transform.eulerAngles.y;
-				float rotation = Mathf.SmoothDampAngle(transform.eulerAngles.y, _targetRotation, ref _rotationVelocity, RotationSmoothTime);
-				//enable crosshair here and handle projectile angles.
-
-				// rotate to face input direction relative to camera position
-				transform.rotation = Quaternion.Euler(0.0f, rotation, 0.0f);
-			}
-
-
-			Vector3 targetDirection = Quaternion.Euler(0.0f, _targetRotation, 0.0f) * Vector3.forward;
-
-			// move the player
-			_controller.Move(targetDirection.normalized * (_speed * Time.deltaTime) + new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
-
-			// update animator if using character
-			if (_hasAnimator)
-			{
-				_animator.SetFloat(_animIDSpeed, _animationBlend);
-				_animator.SetFloat(_animIDMotionSpeed, inputMagnitude);
-			}
-		}
+		
 
 		private void JumpAndGravity()
 		{
 			if (Grounded)
 			{
 				// reset the fall timeout timer
-				_fallTimeoutDelta = FallTimeout;
+				_fallTimeoutDelta = FallTimeout; //I will calculate the fall timeout by using projectile motion equations. 
 
 				// update animator if using character
 				if (_hasAnimator)
@@ -368,8 +374,18 @@ namespace StarterAssets
 				{
 					//check if normal physics or Euler is Checked.
 					// the square root of H * -2 * G = how much velocity needed to reach desired height
-					_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * gravity);
+					//_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * gravity);
+// the square root of H * -2 * G = how much velocity needed to reach desired height
 
+					_verticalVelocity = Mathf.Sqrt(2 * -2f * gravity);
+                    float angle = projectileAngle * Mathf.Deg2Rad;
+					// Debug.Log("Projectile = " + characterProjectile.name);
+					// Debug.Log("firepoint = "+ firePoint);
+					// Debug.Log("groundDirection.normalize = " + groundDirection.normalized);
+					// Debug.Log("Time = "+time);
+					// Debug.Log("CurrentSpeed = "+ currentHorizontalSpeed);
+					StopAllCoroutines();
+                    StartCoroutine(projectileMotionCalculations.ProjectileMotionMovement(characterProjectile, firePoint,groundDirection.normalized, jumpVelocity*2, angle, time));
 					// update animator if using character
 					if (_hasAnimator)
 					{
@@ -403,6 +419,7 @@ namespace StarterAssets
 				}
 
 				// if we are not grounded, do not jump
+				//StopAllCoroutines();
 				_input.jump = false;
 			}
 
