@@ -118,7 +118,7 @@ namespace StarterAssets
 			_input = GetComponent<StarterAssetsInputs>();
 			projectileMotionCalculations = GetComponent<ProjectileMotionCalculations>();
 			AssignAnimationIDs();
-			// reset our timeouts on start
+			//reset our timeouts on start
 			_jumpTimeoutDelta = JumpTimeout;
 			_fallTimeoutDelta = FallTimeout;
 		}
@@ -271,89 +271,6 @@ namespace StarterAssets
 			if (Grounded)
 			{
 				// reset the fall timeout timer
-				_fallTimeoutDelta = FallTimeout;
-
-				// update animator if using character
-				if (_hasAnimator)
-				{
-					_animator.SetBool(_animIDJump, false);
-					_animator.SetBool(_animIDFreeFall, false);
-				}
-
-				// stop our velocity dropping infinitely when grounded
-				if (_verticalVelocity < 0.0f)
-				{
-					_verticalVelocity = -2f;
-				}
-
-				// Jump
-				if (_input.jump && _jumpTimeoutDelta <= 0.0f)
-				{
-					// the square root of H * -2 * G = how much velocity needed to reach desired height
-
-					 //_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * gravity);
-                    float angle = projectileAngle * Mathf.Deg2Rad;
-					// Debug.Log("Projectile = " + characterProjectile.name);
-					// Debug.Log("firepoint = "+ firePoint);
-					// Debug.Log("groundDirection.normalize = " + groundDirection.normalized);
-					// Debug.Log("Time = "+time);
-					// Debug.Log("CurrentSpeed = "+ currentHorizontalSpeed);
-					StopAllCoroutines();
-                    StartCoroutine(projectileMotionCalculations.ProjectileMotionMovement(characterProjectile, firePoint,groundDirection.normalized, jumpVelocity*2, angle, time));
-					
-					//// update animator if using character
-                    if (_hasAnimator)
-					{
-						_animator.SetBool(_animIDJump, true);
-					}
-				}
-			 
-
-				//jump timeout
-				if (_jumpTimeoutDelta >= 0.0f)
-				{
-					_jumpTimeoutDelta -= Time.deltaTime;
-				}
-			}
-			else
-			{
-				//reset the jump timeout timer
-				_jumpTimeoutDelta = JumpTimeout;
-
-				//fall timeout
-				if (_fallTimeoutDelta >= 0.0f)
-				{
-					_fallTimeoutDelta -= Time.deltaTime;
-				}
-				else
-				{
-					//update animator if using character
-					if (_hasAnimator)
-					{
-						_animator.SetBool(_animIDFreeFall, true);
-					}
-				}
-
-				// if we are not grounded, do not jump
-				 _input.jump = false;
-			}
-
-			// apply gravity over time if under terminal (multiply by delta time twice to linearly speed up over time)
-			if (_verticalVelocity < _terminalVelocity)
-			{
-				_verticalVelocity += gravity * Time.deltaTime;
-			}
-		}
-		
-		
-		
-		
-
-		private void JumpAndGravity()
-		{
-			if (Grounded)
-			{
-				// reset the fall timeout timer
 				_fallTimeoutDelta = FallTimeout; //I will calculate the fall timeout by using projectile motion equations. 
 
 				// update animator if using character
@@ -386,6 +303,79 @@ namespace StarterAssets
 					// Debug.Log("CurrentSpeed = "+ currentHorizontalSpeed);
 					StopAllCoroutines();
                     StartCoroutine(projectileMotionCalculations.ProjectileMotionMovement(characterProjectile, firePoint,groundDirection.normalized, jumpVelocity*2, angle, time));
+					// update animator if using character
+					if (_hasAnimator)
+					{
+						_animator.SetBool(_animIDJump, true);
+					}
+				}
+
+				// jump timeout
+				if (_jumpTimeoutDelta >= 0.0f)
+				{
+					_jumpTimeoutDelta -= Time.deltaTime;
+				}
+			}
+			else
+			{
+				// reset the jump timeout timer
+				_jumpTimeoutDelta = JumpTimeout;
+
+				// fall timeout
+				if (_fallTimeoutDelta >= 0.0f)
+				{
+					_fallTimeoutDelta -= Time.deltaTime;
+				}
+				else
+				{
+					// update animator if using character
+					if (_hasAnimator)
+					{
+						_animator.SetBool(_animIDFreeFall, true);
+					}
+				}
+
+				// if we are not grounded, do not jump
+				//StopAllCoroutines();
+				_input.jump = false;
+			}
+
+			// apply gravity over time if under terminal (multiply by delta time twice to linearly speed up over time)
+			if (_verticalVelocity < _terminalVelocity)
+			{
+				_verticalVelocity += gravity * Time.deltaTime;
+			}
+		}
+		private void JumpAndGravity()
+		{
+			if (Grounded)
+			{
+				// reset the fall timeout timer
+				_fallTimeoutDelta = FallTimeout; //I will calculate the fall timeout by using projectile motion equations. 
+
+				// update animator if using character
+				if (_hasAnimator)
+				{
+					_animator.SetBool(_animIDJump, false);
+					_animator.SetBool(_animIDFreeFall, false);
+				}
+
+				// stop our velocity dropping infinitely when grounded
+				if (_verticalVelocity < 0.0f)
+				{
+					_verticalVelocity = -2f;
+				}
+
+				// Jump
+				if (_input.jump && _jumpTimeoutDelta <= 0.0f)
+				{
+					//check if normal physics or Euler is Checked.
+					// the square root of H * -2 * G = how much velocity needed to reach desired height
+					//_verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * gravity);
+// the square root of H * -2 * G = how much velocity needed to reach desired height
+
+					_verticalVelocity = Mathf.Sqrt(2 * -2f * gravity);
+                   
 					// update animator if using character
 					if (_hasAnimator)
 					{

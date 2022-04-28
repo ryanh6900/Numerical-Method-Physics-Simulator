@@ -51,7 +51,6 @@ public class ProjectileMotionCalculations : MonoBehaviour
 		Debug.Log("Time Calculate Path with Height: " + time);
 		angle = Mathf.Atan(b * time / zT);
 		v0.y = b / Mathf.Sin(angle);
-
 	}
 	public void CalculatePath(Vector3 targetPos, float angle, out float v0, out float time)
 	{
