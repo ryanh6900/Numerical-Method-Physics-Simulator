@@ -65,7 +65,9 @@ public class ProjectileMotionCalculations : MonoBehaviour
 		Debug.Log("Time from calculate path: " + time);
 	}
 	
-	public void DrawPath(LineRenderer aimLine, Transform firePoint,Vector3 direction, Vector2 currVelocity, float angle, float time, float step)
+	//uses First order Eulers differential equation to draw path. 
+	//The Euler's method (and Heun's method) translate kinematic equations of motion into functions of integration that operate over an iterative approach. 
+	public void DrawPath(LineRenderer aimLine, Transform firePoint,Vector3 direction, Vector2 currVelocity, float angle, float time, float step) 
 	{
 		step = Mathf.Max(0.01f, step);
 		time = Mathf.Abs(time);
@@ -83,6 +85,7 @@ public class ProjectileMotionCalculations : MonoBehaviour
 		float yFinal = currVelocity.magnitude * time * Mathf.Sin(angle) - (0.5f * -gravity * Mathf.Pow(time, 2));
 		aimLine.SetPosition(count, firePoint.position + direction * zFinal + Vector3.up * yFinal);
 	}
+	//function for creating movement and changing the position of the projectile game object
 	public IEnumerator ProjectileMotionMovement(GameObject projectile, Transform firePoint, Vector3 direction, Vector2 currVelocity, float angle, float time)
 	{
 		float t = 0;
